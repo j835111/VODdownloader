@@ -66,7 +66,6 @@
     <Compile Include="TwitchService.cs" />
     <Compile Include="TwitchVideo.cs" />
     <Compile Include="TwitchVideoQuality.cs" />
-    <Compile Include="TwitchVOD.cs" />
     <Compile Include="VodAuthInfo.cs" />
     <Compile Include="VodPlaylist.cs" />
     <Compile Include="VodPlaylistPart.cs" />
