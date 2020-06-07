@@ -61,6 +61,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="ScrollViewerExtensions.cs" />
     <Compile Include="TimeSpanExtensions.cs" />
     <Compile Include="TwitchService.cs" />
     <Compile Include="TwitchVideo.cs" />

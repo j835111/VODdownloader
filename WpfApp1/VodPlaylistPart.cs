@@ -40,6 +40,8 @@ namespace WpfApp1
 
         public int FileNumber { get; }
 
+        public bool Downloaded { get; set; } = false;
+
         #endregion Properties
     }
 }

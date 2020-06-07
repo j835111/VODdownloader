@@ -72,6 +72,8 @@ namespace WpfApp1
 
                     StateHandler(string.Format("Merging... {0}/{1} {2} %", i + 1, partsCount, Math.Round(((i + 1) / ((float)partsCount)) * 100).ToString()));
                 }
+
+                StateHandler("Merging... 100 %");
             }
         }
 

@@ -8,6 +8,7 @@ using System.Drawing;
 using System.Windows;
 using System.Windows.Forms;
 using Timer = System.Timers.Timer;
+using Button = System.Windows.Controls.Button;
 using System.ComponentModel;
 
 namespace WpfApp1
@@ -22,10 +23,10 @@ namespace WpfApp1
         public static int downloadCount = 0;
         public static List<Task> tasks = null;
         public static Timer timer = null;
+        public static string accessToken = null;
         public Action<string> TextAction;
         public Action<string> StateAction;
         private string channelName = null;
-        public static bool IsClick = false;
         private NotifyIcon notify = null;
 
         public MainWindow()
@@ -73,11 +74,10 @@ namespace WpfApp1
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            if (IsClick)
-                return;
+            Button button = sender as Button;
 
-            IsClick = true;
-            tb.Text += "按了";
+            button.IsEnabled = false;
+
             channelName = name.Text;
 
             tasks = new List<Task>();
@@ -89,8 +89,8 @@ namespace WpfApp1
             tb.Text += Environment.NewLine + "建立成功";
             tb.Text += Environment.NewLine + "正在查詢是否有開台...";
 
-            //try
-            //{
+            //accessToken = TwitchService.GetClientAccessToken();
+
             bool state = TwitchService.GetStreamState(TwitchService.GetChannelIdByName(channelName));
 
             if (!state)
@@ -109,7 +109,7 @@ namespace WpfApp1
             tb.Text += Environment.NewLine + "開始下載已直播之部分...";
             task.Start();
 
-            tb.Text += Environment.NewLine + "開始30秒一次的開台狀態偵測...";
+            tb.Text += Environment.NewLine + "開始15秒一次的開台狀態偵測...";
 
 
             timer = new Timer(15000)
@@ -119,11 +119,6 @@ namespace WpfApp1
             };
             timer.Elapsed += twitchService.TimerHandler;
             timer.Start();
-            //}
-            //catch (Exception ex)
-            //{
-            //    MessageBox.Show("錯誤!!" + Environment.NewLine + ex.ToString());
-            //}
         }
 
         public bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)

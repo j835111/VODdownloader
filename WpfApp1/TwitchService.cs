@@ -1,8 +1,6 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -12,7 +10,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using System.Timers;
-using System.Windows.Controls;
 
 namespace WpfApp1
 {
@@ -21,12 +18,16 @@ namespace WpfApp1
         private const string CHANNEL_VIDEOS_URL = "https://api.twitch.tv/kraken/channels/{0}/videos";
         private const string CHANNEL_URL = "https://api.twitch.tv/kraken/channels/{0}";
         private const string USERS_URL = "https://api.twitch.tv/kraken/users";
-        private const string ALL_PLAYLISTS_URL = "https://usher.twitch.tv/vod/{0}?nauthsig={1}&nauth={2}&allow_source=true&player=twitchweb&allow_spectre=true&allow_audio_only=true";
-        private const string ACCESS_TOKEN_URL = "https://api.twitch.tv/api/vods/{0}/access_token";
-        private const string STREAMS_URL = "https://api.twitch.tv/helix/streams?user_id={0}";
+        private const string ALL_PLAYLISTS_URL = "https://usher.twitch.tv/vod/{0}.m3u8?nauthsig={1}&nauth={2}&allow_source=true&player=twitchweb&allow_spectre=true&allow_audio_only=true";
+        private const string VIDEO_ACCESS_TOKEN_URL = "https://api.twitch.tv/api/vods/{0}/access_token";
+        //private const string STREAMS_URL = "https://api.twitch.tv/helix/streams?user_id={0}";
+        private const string STREAMS_URL = "https://api.twitch.tv/kraken/streams/?channel={0}";
         private const string VIDEO_URL = "https://api.twitch.tv/kraken/videos/{0}";
+        private const string CLIENT_ACCESS_TOKEN_URL = "https://id.twitch.tv/oauth2/token?client_id={0}&client_secret={1}&grant_type=client_credentials";
         //private const string TWITCH_CLIENT_ID = "37v97169hnj8kaoq8fs3hzz8v6jezdj";
-        private const string TWITCH_CLIENT_ID = "2b978gf2i6x3j9eeozx42cueu8o7pf";
+        //private const string TWITCH_CLIENT_ID = "2b978gf2i6x3j9eeozx42cueu8o7pf";
+        private const string TWITCH_CLIENT_SECRET = "x2j4jkmvasar0s5gk2cymkrxgthqje";
+        private const string TWITCH_CLIENT_ID_WEB = "kimne78kx3ncx6brgo4mv6wki5h1ko";
         private const string TWITCH_CLIENT_ID_HEADER = "Client-ID";
         private const string TWITCH_V5_ACCEPT = "application/vnd.twitchtv.v5+json";
         private const string TWITCH_V5_ACCEPT_HEADER = "Accept";
@@ -42,8 +43,7 @@ namespace WpfApp1
         private int vodCount = 0;
         private int downloadCount = 0;
         private string channelName = null;
-
-
+        private string accessToken = null;
 
         public TwitchService(string channelName, Action<string> textAction, Action<string> stateAction)
         {
@@ -52,6 +52,16 @@ namespace WpfApp1
             StateHandler = stateAction;
             vodId = SearchVODId(channelName);
             playlistUrl = RetrievePlaylistUrl(vodId, RetrieveVodAuthInfo(vodId));
+        }
+
+        public static string GetClientAccessToken()
+        {
+            using (WebClient wc = new WebClient())
+            {
+                string result = wc.DownloadString(string.Format(CLIENT_ACCESS_TOKEN_URL, TWITCH_CLIENT_ID_WEB, TWITCH_CLIENT_SECRET));
+
+                return JObject.Parse(result).Value<string>("access_token");
+            }
         }
 
         public TwitchVideo GetTwitchVideoFromId(int id)
@@ -129,6 +139,7 @@ namespace WpfApp1
 
                 if (videosResponseJson != null)
                 {
+                    //JArray videoJson = videosResponseJson.Value<JArray>("videos");
                     JObject videoJson = (JObject)videosResponseJson.Value<JArray>("videos")[0];
                     string id = videoJson.Value<string>("_id");
 
@@ -147,8 +158,9 @@ namespace WpfApp1
         private static WebClient CreateTwitchWebClient()
         {
             WebClient wc = new WebClient();
-            wc.Headers.Add(TWITCH_CLIENT_ID_HEADER, TWITCH_CLIENT_ID);
+            wc.Headers.Add(TWITCH_CLIENT_ID_HEADER, TWITCH_CLIENT_ID_WEB);
             wc.Headers.Add(TWITCH_V5_ACCEPT_HEADER, TWITCH_V5_ACCEPT);
+            //wc.Headers.Add("Authorization", accessToken);
             wc.Encoding = Encoding.UTF8;
             return wc;
         }
@@ -221,6 +233,9 @@ namespace WpfApp1
         {
             using (WebClient webClient = CreateTwitchWebClient())
             {
+                webClient.Headers.Add("Accept", "*/*");
+                webClient.Headers.Add("Accept-Encoding", "gzip, deflate, br");
+
                 //log(Environment.NewLine + Environment.NewLine + "Retrieving m3u8 playlist urls for all VOD qualities...");
                 string allPlaylistsStr = webClient.DownloadString(string.Format(ALL_PLAYLISTS_URL, vodId, vodAuthInfo.Signature, vodAuthInfo.Token));
                 //log(" done!");
@@ -252,9 +267,14 @@ namespace WpfApp1
                 throw new ArgumentNullException(nameof(vodId));
             }
 
-            using (WebClient webClient = CreateTwitchWebClient())
+            using (WebClient webClient = new WebClient())
             {
-                string accessTokenStr = webClient.DownloadString(string.Format(ACCESS_TOKEN_URL, vodId));
+                //webClient.Headers.Add(TWITCH_CLIENT_ID_HEADER, TWITCH_CLIENT_ID_WEB);
+                webClient.Headers.Add(TWITCH_CLIENT_ID_HEADER, TWITCH_CLIENT_ID_WEB);
+                webClient.Headers.Add(TWITCH_V5_ACCEPT_HEADER, TWITCH_V5_ACCEPT);
+                webClient.Encoding = Encoding.UTF8;
+
+                string accessTokenStr = webClient.DownloadString(string.Format(VIDEO_ACCESS_TOKEN_URL, vodId));
 
                 JObject accessTokenJson = JObject.Parse(accessTokenStr);
 
@@ -410,6 +430,8 @@ namespace WpfApp1
         {
             using (WebClient webClient = CreateTwitchWebClient())
             {
+                //webClient.Headers.Add("Authorization", "Bearer " + accessToken);
+
                 string streamStateStr = webClient.DownloadString(string.Format(STREAMS_URL, userId));
 
                 if (string.IsNullOrWhiteSpace(streamStateStr))
@@ -419,14 +441,10 @@ namespace WpfApp1
 
                 JObject streamStateJson = JObject.Parse(streamStateStr);
 
-                if (streamStateJson.Value<JArray>("data").Count == 0)
-                {
+                if (streamStateJson.Value<JArray>("streams").Count == 0)
                     return false;
-                }
                 else
-                {
                     return true;
-                }
             }
         }
 
@@ -435,6 +453,7 @@ namespace WpfApp1
             if (!GetStreamState(GetChannelIdByName(channelName)))
             {
                 MainWindow.timer.Stop();
+
                 Task task = new Task(() =>
                   {
                       DownloadWrapper();
@@ -466,7 +485,6 @@ namespace WpfApp1
 
                 FileSystem.DeleteFile(concatFile);
                 TextHandler("Done!!");
-                MainWindow.IsClick = false;
             }
 
             if (downloadCount == 15)
