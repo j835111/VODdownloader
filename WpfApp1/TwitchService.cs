@@ -1,6 +1,8 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -10,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using System.Timers;
+using System.Windows.Controls;
 
 namespace WpfApp1
 {
@@ -34,38 +37,24 @@ namespace WpfApp1
         private Action<string> TextHandler = null;
         private Action<string> StateHandler = null;
         private TwitchVideo twitchVideo = null;
-        private string vodId = null;
         private string playlistUrl = null;
-        private string channelId = null;
+        private string vodId = null;
         private int vodCount = 0;
         private int downloadCount = 0;
-        private List<Task> tasks = null;
-        private bool isDownloading = false;
+        private string channelName = null;
+
+
 
         public TwitchService(string channelName, Action<string> textAction, Action<string> stateAction)
         {
-            channelId = GetChannelIdByName(channelName);
+            this.channelName = channelName;
             TextHandler = textAction;
             StateHandler = stateAction;
-            tasks = new List<Task>();
-
-            if (GetStreamState(channelId))
-            {
-                vodId = SearchVODId(channelId);
-                playlistUrl = RetrievePlaylistUrl(vodId, RetrieveVodAuthInfo(vodId));
-
-                Task task = new Task(() =>
-                {
-                    DownloadWrapper();
-                });
-                tasks.Add(task);
-
-                TextHandler("開始下載已直播之部分...");
-                task.Start();
-            }
+            vodId = SearchVODId(channelName);
+            playlistUrl = RetrievePlaylistUrl(vodId, RetrieveVodAuthInfo(vodId));
         }
 
-        private TwitchVideo GetTwitchVideoFromId(int id)
+        public TwitchVideo GetTwitchVideoFromId(int id)
         {
             using (WebClient webClient = CreateTwitchWebClient())
             {
@@ -96,7 +85,7 @@ namespace WpfApp1
             return null;
         }
 
-        private static TwitchVideo ParseVideo(JObject videoJson)
+        public static TwitchVideo ParseVideo(JObject videoJson)
         {
             string channel = videoJson.Value<JObject>("channel").Value<string>("display_name");
             string title = videoJson.Value<string>("title");
@@ -115,12 +104,16 @@ namespace WpfApp1
             return new TwitchVideo(channel, title, id, game, views, length, recordedDate, url);
         }
 
-        private string SearchVODId(string channelId)
+        public string SearchVODId(string channel)
         {
-            if (string.IsNullOrWhiteSpace(channelId))
+            if (string.IsNullOrWhiteSpace(channel))
             {
-                throw new ArgumentNullException(nameof(channelId));
+                throw new ArgumentNullException(nameof(channel));
             }
+
+            string channelId = GetChannelIdByName(channel);
+            TextHandler("Find Channel ID:" + channelId);
+            Console.WriteLine("Find Channel ID:" + channelId);
 
             string channelVideosUrl = string.Format(CHANNEL_VIDEOS_URL, channelId);
 
@@ -136,7 +129,6 @@ namespace WpfApp1
 
                 if (videosResponseJson != null)
                 {
-                    //JArray videoJson = videosResponseJson.Value<JArray>("videos");
                     JObject videoJson = (JObject)videosResponseJson.Value<JArray>("videos")[0];
                     string id = videoJson.Value<string>("_id");
 
@@ -161,7 +153,7 @@ namespace WpfApp1
             return wc;
         }
 
-        private static string GetChannelIdByName(string channel)
+        public static string GetChannelIdByName(string channel)
         {
             if (string.IsNullOrWhiteSpace(channel))
             {
@@ -225,7 +217,7 @@ namespace WpfApp1
             }
         }
 
-        private string RetrievePlaylistUrl(string vodId, VodAuthInfo vodAuthInfo)
+        public string RetrievePlaylistUrl(string vodId, VodAuthInfo vodAuthInfo)
         {
             using (WebClient webClient = CreateTwitchWebClient())
             {
@@ -253,7 +245,7 @@ namespace WpfApp1
             }
         }
 
-        private VodAuthInfo RetrieveVodAuthInfo(string vodId)
+        public VodAuthInfo RetrieveVodAuthInfo(string vodId)
         {
             if (string.IsNullOrWhiteSpace(vodId))
             {
@@ -321,7 +313,7 @@ namespace WpfApp1
             }
         }
 
-        public static VodPlaylist RetrieveVodPlaylist(Action<string> TextHandler,  string tempDir, string playlistUrl)
+        public VodPlaylist RetrieveVodPlaylist(string tempDir, string playlistUrl)
         {
             using (WebClient webClient = new WebClient())
             {
@@ -349,9 +341,10 @@ namespace WpfApp1
 
                 return vodPlaylist;
             }
+
         }
 
-        private void DownloadParts(VodPlaylist vodPlaylist)
+        public void DownloadParts(VodPlaylist vodPlaylist)
         {
             int partsCount = vodPlaylist.Count;
 
@@ -413,11 +406,11 @@ namespace WpfApp1
             //log(Environment.NewLine + Environment.NewLine + "Download of all video chunks complete!");
         }
 
-        private static bool GetStreamState(string channelId)
+        public static bool GetStreamState(string userId)
         {
             using (WebClient webClient = CreateTwitchWebClient())
             {
-                string streamStateStr = webClient.DownloadString(string.Format(STREAMS_URL, channelId));
+                string streamStateStr = webClient.DownloadString(string.Format(STREAMS_URL, userId));
 
                 if (string.IsNullOrWhiteSpace(streamStateStr))
                 {
@@ -427,52 +420,70 @@ namespace WpfApp1
                 JObject streamStateJson = JObject.Parse(streamStateStr);
 
                 if (streamStateJson.Value<JArray>("data").Count == 0)
+                {
                     return false;
+                }
                 else
+                {
                     return true;
+                }
             }
         }
 
         public void TimerHandler(object sender, ElapsedEventArgs e)
         {
-            if (GetStreamState(channelId))
+            if (!GetStreamState(GetChannelIdByName(channelName)))
             {
-                if (vodId != SearchVODId(channelId)) // complete download
+                MainWindow.timer.Stop();
+                Task task = new Task(() =>
+                  {
+                      DownloadWrapper();
+                  });
+                task.Start();
+                MainWindow.tasks.Add(task);
+
+                Task.WaitAll(MainWindow.tasks.ToArray());
+
+                ProcessingService processingService = new ProcessingService(StateHandler, TextHandler);
+
+                twitchVideo = GetTwitchVideoFromId(Convert.ToInt32(vodId));
+
+                string concatFile = twitchVideo.RecordedDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "_" + twitchVideo.Title + "_" + twitchVideo.Game + ".ts";
+                string outputFile = twitchVideo.RecordedDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "_" + twitchVideo.Title + "_" + twitchVideo.Game + ".mp4";
+
+                foreach (var c in Path.GetInvalidFileNameChars())
                 {
-                    CompleteDownloading();
+                    concatFile = concatFile.Replace(c, '_');
+                    outputFile = outputFile.Replace(c, '_');
                 }
-                else
-                {
-                    if (downloadCount == 15)
-                    {
-                        vodId = SearchVODId(channelId);
-                        playlistUrl = RetrievePlaylistUrl(vodId, RetrieveVodAuthInfo(vodId));
 
-                        Task task = new Task(() =>
-                        {
-                            DownloadWrapper();
-                        });
+                TextHandler("Start Merge...");
 
-                        task.Start();
-                        tasks.Add(task);
+                processingService.ConcatParts(RetrieveVodPlaylist("temp", playlistUrl), concatFile);
 
-                        downloadCount = 0;
-                        isDownloading = true;
-                    }
+                TextHandler("Start Convert...");
+                processingService.ConvertVideo(concatFile, outputFile, twitchVideo.Length);
 
-                    downloadCount++;
-                }
+                FileSystem.DeleteFile(concatFile);
+                TextHandler("Done!!");
+                MainWindow.IsClick = false;
             }
-            else
+
+            if (downloadCount == 15)
             {
-                if (isDownloading)
-                    CompleteDownloading();
-                else
-                    return;
+                Task task = new Task(() =>
+                  {
+                      DownloadWrapper();
+                  });
+                task.Start();
+                MainWindow.tasks.Add(task);
+                downloadCount = 0;
             }
+
+            downloadCount++;
         }
 
-        private void CheckOutputDirectory(string outputDir)
+        public void CheckOutputDirectory(string outputDir)
         {
             if (!Directory.Exists(outputDir))
             {
@@ -482,50 +493,14 @@ namespace WpfApp1
             }
         }
 
-        private void DownloadWrapper()
+        public void DownloadWrapper()
         {
-            CheckOutputDirectory("temp" + vodId);
-            //VodPlaylist vodPlaylists = RetrieveVodPlaylist("temp" + vodId, playlistUrl);
+            CheckOutputDirectory("temp");
+            VodPlaylist vodPlaylists = RetrieveVodPlaylist("temp", playlistUrl);
             int newCount = vodPlaylists.Count;
             vodPlaylists.RemoveRange(0, vodCount);
             vodCount = newCount;
             DownloadParts(vodPlaylists);
-        }
-
-        private void CompleteDownloading()
-        {
-            Task task = new Task(() =>
-            {
-                DownloadWrapper();
-            });
-            task.Start();
-            tasks.Add(task);
-
-            Task.WaitAll(tasks.ToArray());
-
-            ProcessingService processingService = new ProcessingService(StateHandler, TextHandler);
-
-            twitchVideo = GetTwitchVideoFromId(Convert.ToInt32(vodId));
-
-            string concatFile = twitchVideo.RecordedDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "_" + twitchVideo.Title + "_" + twitchVideo.Game + ".ts";
-            string outputFile = twitchVideo.RecordedDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "_" + twitchVideo.Title + "_" + twitchVideo.Game + ".mp4";
-
-            foreach (var c in Path.GetInvalidFileNameChars())
-            {
-                concatFile = concatFile.Replace(c, '_');
-                outputFile = outputFile.Replace(c, '_');
-            }
-
-            TextHandler("Start Merge...");
-
-            processingService.ConcatParts(RetrieveVodPlaylist("temp", playlistUrl), concatFile);
-
-            TextHandler("Start Convert...");
-            processingService.ConvertVideo(concatFile, outputFile, twitchVideo.Length);
-
-            FileSystem.DeleteFile(concatFile);
-            StateHandler("100 %");
-            TextHandler("Done!!");
         }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -72,8 +72,6 @@ namespace WpfApp1
 
                     StateHandler(string.Format("Merging... {0}/{1} {2} %", i + 1, partsCount, Math.Round(((i + 1) / ((float)partsCount)) * 100).ToString()));
                 }
-
-                StateHandler("Merging... 100 %");
             }
         }
 
@@ -86,7 +84,7 @@ namespace WpfApp1
 
             ProcessStartInfo psi = new ProcessStartInfo(FFMPEGExe)
             {
-                Arguments = "-y -i \"" + sourceFile + "\" -analyzeduration " + int.MaxValue + " -probesize " + int.MaxValue + " -c:v copy -c:a copy -bsf:a aac_adtstoasc \"" + outputFile + "\"",
+                Arguments = "-y -i \"" + sourceFile + "\" -analyzeduration " + int.MaxValue + " -probesize " + int.MaxValue + " -c:v copy -bsf:a aac_adtstoasc \"" + outputFile + "\"",
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
                 StandardErrorEncoding = Encoding.UTF8,
