@@ -43,7 +43,6 @@ namespace WpfApp1
         private int vodCount = 0;
         private int downloadCount = 0;
         private string channelName = null;
-        private string accessToken = null;
 
         public TwitchService(string channelName, Action<string> textAction, Action<string> stateAction)
         {
@@ -501,7 +500,7 @@ namespace WpfApp1
             downloadCount++;
         }
 
-        public void CheckOutputDirectory(string outputDir)
+        public static void CheckOutputDirectory(string outputDir)
         {
             if (!Directory.Exists(outputDir))
             {
